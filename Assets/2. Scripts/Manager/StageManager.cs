@@ -5,16 +5,17 @@ using Taekyung;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System.Collections;
 
 namespace Junyoung
 {
 
     public class StageManager : MonoBehaviour
     {
-        
+
 
         private List<StageData> m_stages_data;
-        
+
         [Header("Stage UI")]
         [SerializeField]
         private Button[] m_select_buttons; //인스펙터에서 연결
@@ -40,15 +41,15 @@ namespace Junyoung
         private GameObject m_player;
 
 
-        [SerializeField] 
+        [SerializeField]
         private int m_now_button_index = 0;
         private List<int> m_path_list = new List<int>();
         private int m_current_path_index = 0;
         private bool m_is_icon_moving = false;
-        private float m_icon_move_speed = 5f;
-       
-        
-       
+        private float m_icon_move_speed = 250f;
+
+
+
 
 
         [Header("Managers")]
@@ -64,56 +65,59 @@ namespace Junyoung
         {
             m_camera_move_ctrl = Camera.main.GetComponent<CameraMoveCtrl>();
 
-            m_player = GameObject.FindGameObjectWithTag("Player");           
-            m_save_manager = GameObject.FindAnyObjectByType<SaveManager>();           
+            m_player = GameObject.FindGameObjectWithTag("Player");
+            m_save_manager = GameObject.FindAnyObjectByType<SaveManager>();
             LoadStagesData("StageData.json");
-            
+
         }
 
-        private void FixedUpdate()
+
+        private IEnumerator MoveIconCorutine()
         {
-            if (!m_is_icon_moving || m_path_list.Count == 0) return;
 
-
-            if (m_current_path_index < 0 || m_current_path_index >= m_path_list.Count)
+            while (m_is_icon_moving && m_path_list.Count > 0)
             {
-                Debug.LogError($"m_current_path_index 범위 초과: {m_current_path_index}, m_path_list.Count={m_path_list.Count}");
-                m_is_icon_moving = false;
-                return;
-            }
+                if (m_current_path_index < 0 || m_current_path_index >= m_path_list.Count)
+                {
+                    Debug.LogError($"m_current_path_index 범위 초과: {m_current_path_index}, m_path_list.Count={m_path_list.Count}");
+                    m_is_icon_moving = false;
+                    yield break;
+                }
 
-            int target_index = m_path_list[m_current_path_index]; // 만들어진 경로 리스트를 path_index값을 따라서 하나씩 이동
+                int target_index = m_path_list[m_current_path_index]; // 만들어진 경로 리스트를 path_index값을 따라서 하나씩 이동
 
-            if (target_index < 0 || target_index >= m_select_buttons_pos_list.Length)
-            {
-                Debug.LogError($"target_index 범위 초과: {target_index}, m_select_buttons_pos_list.Length={m_select_buttons_pos_list.Length}");
-                m_is_icon_moving = false;
-                return;
-            }
+                if (target_index < 0 || target_index >= m_select_buttons_pos_list.Length)
+                {
+                    Debug.LogError($"target_index 범위 초과: {target_index}, m_select_buttons_pos_list.Length={m_select_buttons_pos_list.Length}");
+                    m_is_icon_moving = false;
+                    yield break;
+                }
+                Debug.Log($"MoveIconCorutine 정상 실행");
+
+                Vector2 target_pos = m_select_buttons_pos_list[target_index].anchoredPosition;
+
+                target_pos += new Vector2(0, 70); // 아이콘이 버튼을 가리지 않도록 70만큼 offset
 
 
-            Vector2 target_pos = m_select_buttons_pos_list[target_index].anchoredPosition;
-            
-            target_pos += new Vector2(0,70); // 아이콘이 버튼을 가리지 않도록 70만큼 offset
-         
-            //아이콘이 클릭한 버튼 위치로 이동
-            m_player_icon.anchoredPosition = Vector2.MoveTowards(m_player_icon.anchoredPosition, target_pos, m_icon_move_speed);
-
-            //아이콘이 버튼 위치에 도착했는지 체크
-            if (Vector2.Distance(m_player_icon.anchoredPosition, target_pos) < 0.1f) // 부동 소수점 오류 때문에 ==로 단순 비교는 오류가 발생 할 수 있음
-            {
-                //중간 경로 이동
-                if(m_current_path_index< m_path_list.Count-1) // 버튼에 도착한 이후에도 index++하면 index범위 오류가 발생함
+                //아이콘이 클릭한 버튼 위치로 이동 
+                // 부동 소수점 오류 때문에 ==로 단순 비교는 오류가 발생 할 수 있음
+                while (Vector2.Distance(m_player_icon.anchoredPosition, target_pos) > 0.1f)
+                {
+                    m_player_icon.anchoredPosition = Vector2.MoveTowards(m_player_icon.anchoredPosition, target_pos, m_icon_move_speed * Time.deltaTime);
+                    yield return null; //다음 프레임까지 대기, 프레임 단위로 부드럽게 이동시키기 위해 사용
+                }
+                //다음 경로로 이동
+                if (m_current_path_index < m_path_list.Count - 1) // 버튼에 도착한 이후에도 index++하면 index범위 오류가 발생함
                     m_current_path_index++;
                 else //최종 도착
-                {               
+                {
                     m_is_icon_moving = false;
 
                     m_stage_select_ckeck_UI.SetActive(true);
 
                     Debug.Log($"아이콘이 버튼 {m_now_button_index}에 도달");
                 }
-            }                
+            }
         }
 
         private void LoadStagesData(string file_name)
@@ -142,7 +146,7 @@ namespace Junyoung
 
             Debug.Log("스테이지 데이터 로드 성공");
         }
-        
+
         public void LoadStage(int stage_index) //버튼에서 로드할 경우 인덱스는 인스펙터에서 버튼마다 직접 할당
         {
             if (stage_index < 0 || stage_index >= m_stages_data.Count)
@@ -165,10 +169,10 @@ namespace Junyoung
             m_camera_move_ctrl.CameraLimitSize = stageData.m_camera_limit_size;
 
             Debug.Log($"스테이지 {stage_index} 로드");
-            
+
 
             m_save_manager.Player.m_stage_id = stage_index;
-            
+
             m_save_manager.Player.m_stage_state = 0;
             m_talk_manager.ChangeTalkScene();
 
@@ -177,19 +181,19 @@ namespace Junyoung
 
 
         }
-        
+
         public void StageSelectPanelOnoff() // 스테이지 선택 UI를 활성화/비활성화 함
         {
             bool isActive = m_stage_select_UI.activeSelf;
-            if ( !isActive )
+            if (!isActive)
             {
                 SelectButtonInteract();
                 Debug.Log($"스테이지 선택창 활성화");
             }
-                
+
             else
                 Debug.Log($"스테이지 선택창 비활성화");
-            m_stage_select_UI.SetActive( !isActive );
+            m_stage_select_UI.SetActive(!isActive);
 
             if (m_stage_select_ckeck_UI.activeSelf)
                 m_stage_select_ckeck_UI.SetActive(false);
@@ -198,9 +202,9 @@ namespace Junyoung
         }
 
         public void StageSelect(int stage_index)// 버튼 클릭으로 버튼에 해당하는 스테이지 index를 받아옴
-        {           
-            m_stage_index = stage_index;            
-            m_ui_text.text = $"Do you want to go to Stage {m_stage_index+1} ?";
+        {
+            m_stage_index = stage_index;
+            m_ui_text.text = $"Do you want to go to Stage {m_stage_index + 1} ?";
 
         }
 
@@ -220,25 +224,25 @@ namespace Junyoung
 
         public void SelectButtonInteract() //스테이지 선택 버튼을 최대 클리어 스테이지 +1 만큼 활성화 
         {
-            for(int i =1; i<= m_save_manager.Player.m_max_clear_stage +1; i++)
+            for (int i = 1; i <= m_save_manager.Player.m_max_clear_stage + 1; i++)
             {
-                if(i > m_max_stage)
+                if (i > m_max_stage)
                 {
                     Debug.Log($"더 활성화할 버튼이 없음");
                     return;
                 }
                 m_select_buttons[i].interactable = true;
             }
-            Debug.Log($"스테이지 {m_save_manager.Player.m_max_clear_stage +1} 까지 버튼 활성화");
+            Debug.Log($"스테이지 {m_save_manager.Player.m_max_clear_stage + 1} 까지 버튼 활성화");
         }
 
         public void SelectButtonReset() //활성화된 버튼들을 전부 비활성화
         {
-            for(int i = 1; i <= 9; i++)
+            for (int i = 1; i <= 9; i++)
             {
                 m_select_buttons[i].interactable = false;
             }
-            
+
             Debug.Log($"스테이지 선택 버튼 비활성화");
         }
 
@@ -253,7 +257,7 @@ namespace Junyoung
             }
 
             m_path_list.Clear();
-            m_current_path_index = 0; 
+            m_current_path_index = 0;
 
             if (m_now_button_index < button_index) // 지금 위치보다 클릭한 버튼이 뒤면 정방향
             {
@@ -280,6 +284,8 @@ namespace Junyoung
 
             m_now_button_index = button_index; // 경로는 만들어졌으니 now_button_index 를 목표 버튼의 index로 초기화
             Debug.Log($"경로 생성 완료: {string.Join(", ", m_path_list)}");
+
+            StartCoroutine(MoveIconCorutine());
         }
     }
 }
